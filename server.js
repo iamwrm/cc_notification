@@ -944,19 +944,25 @@ const HTML = `<!DOCTYPE html>
 
     es.addEventListener("resolved", function(e) {
       var d = JSON.parse(e.data);
-      if (items[d.id]) items[d.id].resolved = true;
-      render();
+      if (items[d.id] && !items[d.id].resolved) {
+        items[d.id].resolved = true;
+        render();
+      }
     });
 
     es.addEventListener("deleted", function(e) {
       var d = JSON.parse(e.data);
-      delete items[d.id];
-      render();
+      if (items[d.id]) {
+        delete items[d.id];
+        render();
+      }
     });
 
     es.addEventListener("cleared", function() {
-      items = {};
-      render();
+      if (Object.keys(items).length > 0) {
+        items = {};
+        render();
+      }
     });
 
     es.onerror = function() {
