@@ -446,7 +446,9 @@ const HTML = `<!DOCTYPE html>
     margin-bottom: 8px;
     position: relative;
     animation: cardIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards;
-    transition: border-color 0.2s, box-shadow 0.3s, background 0.2s;
+    transition: border-color 0.2s, box-shadow 0.3s, background 0.2s,
+      opacity 0.18s ease, transform 0.18s ease,
+      height 0.18s ease, margin 0.18s ease, padding 0.18s ease, border-width 0.18s ease;
   }
 
   .card::before {
@@ -470,6 +472,29 @@ const HTML = `<!DOCTYPE html>
 
   .card:hover::before { opacity: 1; }
 
+  .card.hover-lock,
+  .card.hover-lock:hover {
+    border-color: var(--border-hover);
+    background: var(--surface-hover);
+    box-shadow: var(--card-hover-shadow);
+  }
+
+  .card.hover-lock::before,
+  .card.hover-lock:hover::before { opacity: 1; }
+
+  body.suppress-hover #list .card:not(.hover-lock),
+  body.suppress-hover #list .card:not(.hover-lock) * {
+    pointer-events: none !important;
+  }
+
+  body.suppress-hover .card:hover:not(.hover-lock) {
+    border-color: var(--border);
+    background: var(--surface);
+    box-shadow: none;
+  }
+
+  body.suppress-hover .card:hover:not(.hover-lock)::before { opacity: 0.6; }
+
   .card.resolved { opacity: 0.35; }
   .card.resolved::before { background: var(--green); opacity: 0.4; }
   .card.resolved:hover {
@@ -477,8 +502,39 @@ const HTML = `<!DOCTYPE html>
     box-shadow: var(--card-resolved-hover-shadow);
   }
 
+  .card.resolved.hover-lock,
+  .card.resolved.hover-lock:hover {
+    opacity: 0.45;
+    box-shadow: var(--card-resolved-hover-shadow);
+  }
+
+  .card.resolved.hover-lock::before,
+  .card.resolved.hover-lock:hover::before { opacity: 0.4; }
+
+  body.suppress-hover .card.resolved:hover:not(.hover-lock) {
+    opacity: 0.35;
+    box-shadow: none;
+  }
+
   .card.removing {
-    animation: cardOut 0.2s cubic-bezier(0.55, 0, 1, 0.45) forwards;
+    opacity: 0;
+    transform: scale(0.985) translateY(-4px);
+    pointer-events: none;
+  }
+
+  .card.collapsing {
+    overflow: hidden;
+    height: 0 !important;
+    min-height: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-top-width: 0;
+    border-bottom-width: 0;
+  }
+
+  .card.collapsing::before {
+    opacity: 0;
   }
 
   @keyframes cardIn {
@@ -486,9 +542,6 @@ const HTML = `<!DOCTYPE html>
     to { opacity: 1; transform: translateY(0); }
   }
 
-  @keyframes cardOut {
-    to { opacity: 0; transform: scale(0.96) translateY(-4px); }
-  }
 
   .card-meta {
     display: flex;
@@ -833,6 +886,10 @@ const HTML = `<!DOCTYPE html>
 
   /* ── State ── */
   let items = {};
+  let pendingDeletes = new Set();
+  let pendingResolves = new Set();
+  let pendingClear = false;
+  let deleteHoverSuppressions = 0;
 
   function relTime(ts) {
     const s = Math.floor((Date.now() - ts) / 1000);
@@ -842,11 +899,16 @@ const HTML = `<!DOCTYPE html>
     return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
-  function render() {
-    const list = document.getElementById("list");
-    const sorted = Object.values(items).sort((a, b) => b.ts - a.ts);
-    const active = sorted.filter(n => !n.resolved);
+  function emptyHtml() {
+    return '<div class="empty">'
+      + '<div class="empty-ring"></div>'
+      + '<div class="empty-label">No notifications</div>'
+      + '<div class="empty-detail">Listening on <code>:9000/v1/notification</code><br>Waiting for incoming hooks</div>'
+      + '</div>';
+  }
 
+  function updateMeta() {
+    const active = Object.values(items).filter(function(n) { return !n.resolved; });
     const el = document.getElementById("countEl");
     const c = active.length;
     el.textContent = c;
@@ -855,14 +917,28 @@ const HTML = `<!DOCTYPE html>
     document.title = c > 0
       ? "(" + c + ") notifications \\u00b7 claude-code"
       : "notifications \\u00b7 claude-code";
+  }
+
+  function beginDeleteHoverSuppression() {
+    deleteHoverSuppressions++;
+    document.body.classList.add("suppress-hover");
+  }
+
+  function endDeleteHoverSuppression() {
+    deleteHoverSuppressions = Math.max(0, deleteHoverSuppressions - 1);
+    if (deleteHoverSuppressions === 0) {
+      document.body.classList.remove("suppress-hover");
+    }
+  }
+
+  function render() {
+    const list = document.getElementById("list");
+    const sorted = Object.values(items).sort((a, b) => b.ts - a.ts);
+
+    updateMeta();
 
     if (sorted.length === 0) {
-      list.innerHTML =
-        '<div class="empty">'
-        + '<div class="empty-ring"></div>'
-        + '<div class="empty-label">No notifications</div>'
-        + '<div class="empty-detail">Listening on <code>:9000/v1/notification</code><br>Waiting for incoming hooks</div>'
-        + '</div>';
+      list.innerHTML = emptyHtml();
       return;
     }
 
@@ -896,27 +972,53 @@ const HTML = `<!DOCTYPE html>
   }
 
   function resolve(id) {
+    pendingResolves.add(id);
     if (items[id]) items[id].resolved = true;
     render();
-    fetch(authUrl("/v1/notification/" + id + "/resolve"), { method: "POST" });
+    fetch(authUrl("/v1/notification/" + id + "/resolve"), { method: "POST" })
+      .catch(function() { pendingResolves.delete(id); });
   }
 
   function remove(id) {
+    pendingDeletes.add(id);
+    beginDeleteHoverSuppression();
     var el = document.getElementById("card-" + id);
+    var finish = function() {
+      pendingDeletes.delete(id);
+      endDeleteHoverSuppression();
+    };
     if (el) {
+      if (el.matches(":hover")) el.classList.add("hover-lock");
+      var h = el.offsetHeight;
+      el.style.height = h + 'px';
+      el.style.overflow = 'hidden';
+      void el.offsetHeight;
       el.classList.add("removing");
-      setTimeout(function() { delete items[id]; render(); }, 220);
+      requestAnimationFrame(function() {
+        el.classList.add("collapsing");
+      });
+      setTimeout(function() {
+        if (items[id]) delete items[id];
+        if (el.parentNode) el.parentNode.removeChild(el);
+        finish();
+        if (Object.keys(items).length === 0) render();
+        else updateMeta();
+      }, 220);
     } else {
-      delete items[id];
+      if (items[id]) delete items[id];
+      finish();
       render();
     }
-    fetch(authUrl("/v1/notification/" + id), { method: "DELETE" });
+    fetch(authUrl("/v1/notification/" + id), { method: "DELETE" })
+      .catch(function() { pendingDeletes.delete(id); });
   }
 
   function clearAll() {
+    pendingClear = true;
     items = {};
     render();
-    fetch(authUrl("/v1/notifications"), { method: "DELETE" });
+    fetch(authUrl("/v1/notifications"), { method: "DELETE" })
+      .catch(function() { pendingClear = false; });
   }
 
   /* ── SSE ── */
@@ -944,6 +1046,10 @@ const HTML = `<!DOCTYPE html>
 
     es.addEventListener("resolved", function(e) {
       var d = JSON.parse(e.data);
+      if (pendingResolves.has(d.id)) {
+        pendingResolves.delete(d.id);
+        return;
+      }
       if (items[d.id] && !items[d.id].resolved) {
         items[d.id].resolved = true;
         render();
@@ -952,6 +1058,7 @@ const HTML = `<!DOCTYPE html>
 
     es.addEventListener("deleted", function(e) {
       var d = JSON.parse(e.data);
+      if (pendingDeletes.has(d.id)) return;
       if (items[d.id]) {
         delete items[d.id];
         render();
@@ -959,6 +1066,10 @@ const HTML = `<!DOCTYPE html>
     });
 
     es.addEventListener("cleared", function() {
+      if (pendingClear) {
+        pendingClear = false;
+        return;
+      }
       if (Object.keys(items).length > 0) {
         items = {};
         render();
