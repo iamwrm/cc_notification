@@ -5,14 +5,14 @@ const Database = require("better-sqlite3");
 
 // ── CLI args ────────────────────────────────────────────────
 function parseArgs(argv) {
-  const args = { port: 9000, key: "", db: "", tz: "" };
+  const args = { port: 9000, host: "0.0.0.0", key: "", db: "", tz: "" };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--help" || a === "-h") {
-      console.log("Usage: node server.js [--port 9000] [--key SECRET] [--db path/to/notifications.db] [--tz Asia/Hong_Kong]");
+      console.log("Usage: node server.js [--host 0.0.0.0] [--port 9000] [--key SECRET] [--db path/to/notifications.db] [--tz Asia/Hong_Kong]");
       process.exit(0);
     }
-    for (const name of ["port", "key", "db", "tz"]) {
+    for (const name of ["port", "host", "key", "db", "tz"]) {
       const flag = `--${name}`;
       if (a === flag && argv[i + 1]) { args[name] = argv[++i]; break; }
       if (a.startsWith(flag + "="))  { args[name] = a.slice(flag.length + 1); break; }
@@ -24,6 +24,7 @@ function parseArgs(argv) {
 
 const cli = parseArgs(process.argv);
 const PORT = cli.port;
+const HOST = cli.host;
 const AUTH_KEY = cli.key;
 const DB_PATH = cli.db ? nodePath.resolve(cli.db) : nodePath.join(__dirname, "notifications.db");
 const TZ = cli.tz;
@@ -1233,14 +1234,16 @@ const shutdown = () => { db.close(); process.exit(0); };
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
-server.listen(PORT, () => {
+server.listen(PORT, HOST, () => {
+  const displayHost = HOST === "0.0.0.0" ? "localhost" : HOST;
   const keyInfo = AUTH_KEY ? `  │  Key:      ${AUTH_KEY.slice(0, 4)}${'*'.repeat(Math.max(0, AUTH_KEY.length - 4))}` : '  │  Auth:     disabled';
-  const uiUrl = AUTH_KEY ? `http://localhost:${PORT}/?key=${AUTH_KEY}` : `http://localhost:${PORT}`;
+  const uiUrl = AUTH_KEY ? `http://${displayHost}:${PORT}/?key=${AUTH_KEY}` : `http://${displayHost}:${PORT}`;
   console.log(`
   ┌──────────────────────────────────────────┐
   │  claude-code notification server          │
   │                                           │
   │  UI:       ${uiUrl}${' '.repeat(Math.max(1, 34 - uiUrl.length))}│
+  │  Host:     ${HOST}${' '.repeat(Math.max(1, 23 - HOST.length))}│
 ${keyInfo}${' '.repeat(Math.max(1, 44 - keyInfo.length))}│
   │  DB:       ${nodePath.basename(DB_PATH)}${' '.repeat(Math.max(1, 23 - nodePath.basename(DB_PATH).length))}│
   │                                           │
