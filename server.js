@@ -3,8 +3,26 @@ const { randomUUID } = require("crypto");
 const nodePath = require("path");
 const Database = require("better-sqlite3");
 
-const PORT = 9000;
-const AUTH_KEY = process.argv[2] || "";
+// ── CLI args ────────────────────────────────────────────────
+function parseArgs(argv) {
+  const args = { port: 9000, key: "" };
+  for (let i = 2; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--port" && argv[i + 1]) { args.port = parseInt(argv[++i], 10); }
+    else if (a.startsWith("--port="))  { args.port = parseInt(a.split("=")[1], 10); }
+    else if (a === "--key" && argv[i + 1]) { args.key = argv[++i]; }
+    else if (a.startsWith("--key="))   { args.key = a.split("=")[1]; }
+    else if (a === "--help" || a === "-h") {
+      console.log("Usage: node server.js [--port 9000] [--key SECRET]");
+      process.exit(0);
+    }
+  }
+  return args;
+}
+
+const cli = parseArgs(process.argv);
+const PORT = cli.port;
+const AUTH_KEY = cli.key;
 const DB_PATH = nodePath.join(__dirname, "notifications.db");
 
 // ── SQLite ──────────────────────────────────────────────────

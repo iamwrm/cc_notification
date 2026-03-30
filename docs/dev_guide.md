@@ -5,10 +5,17 @@ A self-hosted notification dashboard for [claude-code](https://docs.anthropic.co
 ## Quick start
 
 ```bash
-npm install            # one-time: installs better-sqlite3
-node server.js         # no auth
-node server.js SECRET  # with auth key
+npm install                          # one-time: installs better-sqlite3
+node server.js                       # no auth, default port 9000
+node server.js --key=SECRET          # with auth key
+node server.js --port 8080 --key=SECRET  # custom port + auth
 ```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--port` | `9000` | HTTP port |
+| `--key` | _(none)_ | Auth key — when set, all requests require it |
+| `--help` | | Show usage |
 
 The server prints a banner with the full UI URL on startup.
 
@@ -35,10 +42,10 @@ On page load the browser opens an SSE connection at `/v1/stream`. The server sen
 
 ## Authentication
 
-Pass a key as the first CLI argument:
+Pass a key via the `--key` flag:
 
 ```bash
-node server.js mySecretKey
+node server.js --key=mySecretKey
 ```
 
 When a key is set **every** request (UI, SSE, API) must include it via one of:
@@ -172,7 +179,7 @@ Add a hook to your claude-code config that POSTs to this server on events you ca
     "notification": [
       {
         "type": "command",
-        "command": "curl -sS -X POST http://localhost:9000/v1/notification?key=SECRET -H 'Content-Type: application/json' -d '{\"msg\":\"$CLAUDE_EVENT\"}'"
+        "command": "curl -sS -X POST 'http://localhost:9000/v1/notification?key=SECRET' -H 'Content-Type: application/json' -d '{\"msg\":\"$CLAUDE_EVENT\"}'"
       }
     ]
   }
@@ -186,7 +193,7 @@ The entire app is a single `server.js` file. The HTML/CSS/JS frontend is embedde
 To modify:
 
 1. Edit the CSS/HTML/JS inside the `HTML` constant in `server.js`
-2. Kill and restart: `pkill -f "node server.js"; node server.js SECRET`
+2. Kill and restart: `pkill -f "node server.js"; node server.js --key=SECRET`
 3. Hard-refresh the browser (`Ctrl+Shift+R`)
 
 ### Key code sections
@@ -201,4 +208,8 @@ To modify:
 
 ### Port
 
-Default is `9000`, hardcoded in `const PORT = 9000`. Change it at the top of `server.js`.
+Default is `9000`. Override with `--port`:
+
+```bash
+node server.js --port 8080
+```
