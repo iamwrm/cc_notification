@@ -55,18 +55,90 @@ Open the URL printed on startup:
 
 ## Send a notification
 
+### Plain text
+
 ```bash
-# no auth
 curl -X POST http://localhost:9000/v1/notification \
   -H 'Content-Type: application/json' \
   -d '{"msg":"build finished"}'
+```
 
-# with auth (query param)
+### Markdown
+
+Messages are rendered as markdown ([marked.js](https://marked.js.org/)). Headings, bold, code blocks, lists, tables, links, blockquotes all work.
+
+```bash
+curl -X POST http://localhost:9000/v1/notification \
+  -H 'Content-Type: application/json' \
+  -d '{"msg":"## Build Report\n\n**Status:** ✅ passed\n\n- `47` modules compiled\n- `0` errors\n\n```js\nconsole.log(done)\n```"}'
+```
+
+Renders as:
+
+> ## Build Report
+> **Status:** ✅ passed
+> - `47` modules compiled
+> - `0` errors
+> ```js
+> console.log(done)
+> ```
+
+### HTML
+
+Since markdown passes through HTML, you can embed raw HTML:
+
+```bash
+curl -X POST http://localhost:9000/v1/notification \
+  -H 'Content-Type: application/json' \
+  -d '{"msg":"<b>Alert</b>: server <code>web-03</code> is <span style=\\"color:red\\">down</span>"}'
+```
+
+### Escaping special characters
+
+The `msg` value is inside a JSON string, so special characters must be escaped for JSON:
+
+| Character | Escape as | Example |
+|---|---|---|
+| `"` | `\"` | `{"msg":"she said \"hello\""}` |
+| `\` | `\\` | `{"msg":"path: C:\\\\Users"}` |
+| newline | `\n` | `{"msg":"line one\nline two"}` |
+| tab | `\t` | `{"msg":"col1\tcol2"}` |
+
+For markdown special characters (`*`, `_`, `` ` ``, `#`, `|`, etc.), escape with a backslash *inside* the message:
+
+```bash
+# Literal asterisks (not bold)
+curl -X POST http://localhost:9000/v1/notification \
+  -H 'Content-Type: application/json' \
+  -d '{"msg":"price is 5 \\*each\\*"}'
+
+# Literal backticks
+curl -X POST http://localhost:9000/v1/notification \
+  -H 'Content-Type: application/json' \
+  -d '{"msg":"use \\`echo\\` command"}'
+```
+
+> **Tip:** Use a tool or language to build the JSON instead of hand-escaping:
+>
+> ```bash
+> # jq handles all escaping for you
+> MSG="Deploy **v2.1** to prod
+> - 3 services updated
+> - \`zero\` downtime"
+> jq -n --arg m "$MSG" '{msg: $m}' | \
+>   curl -X POST http://localhost:9000/v1/notification \
+>     -H 'Content-Type: application/json' -d @-
+> ```
+
+### With auth
+
+```bash
+# query param
 curl -X POST "http://localhost:9000/v1/notification?key=SECRET" \
   -H 'Content-Type: application/json' \
   -d '{"msg":"build finished"}'
 
-# with auth (bearer header)
+# bearer header
 curl -X POST http://localhost:9000/v1/notification \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer SECRET' \
@@ -80,6 +152,7 @@ curl -X POST http://localhost:9000/v1/notification \
 - **Auth** — optional `--key` flag, supports query param / Bearer / X-Auth-Key header
 - **Themes** — dark (default) + light, toggle in header, saved to localStorage
 - **Browser notifications** — permission prompt on first visit
+- **Markdown** — messages render as markdown (headings, code blocks, lists, tables, etc.)
 - **Single file** — entire server + UI in one `server.js`
 
 ## Docs
