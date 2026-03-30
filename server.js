@@ -69,6 +69,7 @@ const HTML = `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Notifications · claude-code</title>
+<script src="https://cdn.jsdelivr.net/npm/marked@17/marked.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
@@ -519,10 +520,86 @@ const HTML = `<!DOCTYPE html>
     color: var(--text-bright);
     margin-bottom: 18px;
     word-break: break-word;
-    white-space: pre-wrap;
     letter-spacing: -0.01em;
     transition: color 0.35s;
   }
+
+  /* Markdown content styles */
+  .card-msg p { margin: 0 0 0.5em; }
+  .card-msg p:last-child { margin-bottom: 0; }
+  .card-msg h1, .card-msg h2, .card-msg h3, .card-msg h4 {
+    font-family: 'Outfit', sans-serif;
+    margin: 0.6em 0 0.3em;
+    color: var(--text-white);
+  }
+  .card-msg h1 { font-size: 1.3em; }
+  .card-msg h2 { font-size: 1.15em; }
+  .card-msg h3 { font-size: 1.05em; }
+  .card-msg code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.88em;
+    background: var(--accent-dim);
+    border: 1px solid var(--border);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--accent);
+  }
+  .card-msg pre {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    margin: 0.5em 0;
+  }
+  .card-msg pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 0.85em;
+    color: var(--text-secondary);
+  }
+  .card-msg ul, .card-msg ol {
+    padding-left: 1.4em;
+    margin: 0.4em 0;
+  }
+  .card-msg li { margin: 0.15em 0; }
+  .card-msg blockquote {
+    border-left: 2px solid var(--accent-border);
+    padding-left: 12px;
+    margin: 0.5em 0;
+    color: var(--text-secondary);
+    font-style: italic;
+  }
+  .card-msg a {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--accent-border);
+    transition: border-color 0.15s;
+  }
+  .card-msg a:hover { border-color: var(--accent); }
+  .card-msg hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 0.8em 0;
+  }
+  .card-msg table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0.5em 0;
+    font-size: 0.9em;
+  }
+  .card-msg th, .card-msg td {
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    text-align: left;
+  }
+  .card-msg th {
+    background: var(--surface);
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+  .card-msg img { max-width: 100%; border-radius: 4px; }
 
   .card-actions {
     display: flex;
@@ -798,7 +875,7 @@ const HTML = `<!DOCTYPE html>
           + '<span class="card-id">' + n.id.slice(0, 8) + '</span>'
           + '<span class="card-time">' + relTime(n.ts) + '</span>'
         + '</div>'
-        + '<div class="card-msg">' + escHtml(n.msg) + '</div>'
+        + '<div class="card-msg">' + renderMsg(n.msg) + '</div>'
         + '<div class="card-actions">'
           + (n.resolved
             ? '<span class="resolved-tag">' + chk + ' resolved</span> '
@@ -809,8 +886,11 @@ const HTML = `<!DOCTYPE html>
     }).join("");
   }
 
-  function escHtml(s) {
-    var d = document.createElement("div");
+  function renderMsg(s) {
+    if (typeof marked !== 'undefined' && marked.parse) {
+      try { return marked.parse(s, { breaks: true }); } catch(e) {}
+    }
+    var d = document.createElement('div');
     d.textContent = s;
     return d.innerHTML;
   }
