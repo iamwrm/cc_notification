@@ -69,7 +69,7 @@ const HTML = `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Notifications · claude-code</title>
-<script src="https://cdn.jsdelivr.net/npm/marked@17/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@17/lib/marked.umd.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
