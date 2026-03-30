@@ -26,6 +26,7 @@ const cli = parseArgs(process.argv);
 const PORT = cli.port;
 const AUTH_KEY = cli.key;
 const DB_PATH = cli.db ? nodePath.resolve(cli.db) : nodePath.join(__dirname, "notifications.db");
+const SERVER_VERSION = `${Date.now().toString(36)}-${process.pid}`;
 
 // ── SQLite ──────────────────────────────────────────────────
 const db = new Database(DB_PATH);
@@ -445,10 +446,11 @@ const HTML = `<!DOCTYPE html>
     padding: 20px;
     margin-bottom: 8px;
     position: relative;
+    transition: border-color 0.2s, box-shadow 0.3s, background 0.2s;
+  }
+
+  .card.card-enter {
     animation: cardIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards;
-    transition: border-color 0.2s, box-shadow 0.3s, background 0.2s,
-      opacity 0.18s ease, transform 0.18s ease,
-      height 0.18s ease, margin 0.18s ease, padding 0.18s ease, border-width 0.18s ease;
   }
 
   .card::before {
@@ -482,11 +484,6 @@ const HTML = `<!DOCTYPE html>
   .card.hover-lock::before,
   .card.hover-lock:hover::before { opacity: 1; }
 
-  body.suppress-hover #list .card:not(.hover-lock),
-  body.suppress-hover #list .card:not(.hover-lock) * {
-    pointer-events: none !important;
-  }
-
   body.suppress-hover .card:hover:not(.hover-lock) {
     border-color: var(--border);
     background: var(--surface);
@@ -517,13 +514,9 @@ const HTML = `<!DOCTYPE html>
   }
 
   .card.removing {
+    overflow: hidden;
     opacity: 0;
     transform: scale(0.985) translateY(-4px);
-    pointer-events: none;
-  }
-
-  .card.collapsing {
-    overflow: hidden;
     height: 0 !important;
     min-height: 0;
     margin-bottom: 0;
@@ -531,9 +524,10 @@ const HTML = `<!DOCTYPE html>
     padding-bottom: 0;
     border-top-width: 0;
     border-bottom-width: 0;
+    pointer-events: none;
   }
 
-  .card.collapsing::before {
+  .card.removing::before {
     opacity: 0;
   }
 
@@ -881,15 +875,18 @@ const HTML = `<!DOCTYPE html>
   setTheme(getTheme());
 
   /* ── Auth key from URL ── */
+  const CLIENT_SERVER_VERSION = ${JSON.stringify(SERVER_VERSION)};
   var authKey = new URLSearchParams(window.location.search).get('key') || '';
   function authUrl(path) { return authKey ? path + (path.indexOf('?') === -1 ? '?' : '&') + 'key=' + encodeURIComponent(authKey) : path; }
 
   /* ── State ── */
   let items = {};
+  let renderedIds = new Set();
   let pendingDeletes = new Set();
   let pendingResolves = new Set();
   let pendingClear = false;
   let deleteHoverSuppressions = 0;
+  let releaseSuppressedHover = null;
 
   function relTime(ts) {
     const s = Math.floor((Date.now() - ts) / 1000);
@@ -919,34 +916,58 @@ const HTML = `<!DOCTYPE html>
       : "notifications \\u00b7 claude-code";
   }
 
+  function cancelSuppressedHoverRelease() {
+    if (!releaseSuppressedHover) return;
+    window.removeEventListener("pointermove", releaseSuppressedHover, true);
+    window.removeEventListener("pointerdown", releaseSuppressedHover, true);
+    releaseSuppressedHover = null;
+  }
+
+  function armSuppressedHoverRelease() {
+    if (releaseSuppressedHover) return;
+    releaseSuppressedHover = function() {
+      cancelSuppressedHoverRelease();
+      document.body.classList.remove("suppress-hover");
+    };
+    window.addEventListener("pointermove", releaseSuppressedHover, true);
+    window.addEventListener("pointerdown", releaseSuppressedHover, true);
+  }
+
   function beginDeleteHoverSuppression() {
     deleteHoverSuppressions++;
+    cancelSuppressedHoverRelease();
     document.body.classList.add("suppress-hover");
   }
 
   function endDeleteHoverSuppression() {
     deleteHoverSuppressions = Math.max(0, deleteHoverSuppressions - 1);
     if (deleteHoverSuppressions === 0) {
-      document.body.classList.remove("suppress-hover");
+      armSuppressedHoverRelease();
     }
   }
 
   function render() {
     const list = document.getElementById("list");
     const sorted = Object.values(items).sort((a, b) => b.ts - a.ts);
+    const prevRenderedIds = renderedIds;
+    const nextRenderedIds = new Set();
 
     updateMeta();
 
     if (sorted.length === 0) {
+      renderedIds = nextRenderedIds;
       list.innerHTML = emptyHtml();
       return;
     }
 
     const chk = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
     list.innerHTML = sorted.map(function(n, i) {
+      nextRenderedIds.add(n.id);
+      var shouldEnter = !n.resolved && !prevRenderedIds.has(n.id);
       var cls = n.resolved ? "card resolved" : "card";
-      var dly = "animation-delay:" + (i * 0.035) + "s";
-      return '<div class="' + cls + '" id="card-' + n.id + '" style="' + dly + '">'
+      if (shouldEnter) cls += " card-enter";
+      var dly = shouldEnter ? "animation-delay:" + (i * 0.035) + "s" : "";
+      return '<div class="' + cls + '" id="card-' + n.id + '"' + (dly ? ' style="' + dly + '"' : '') + '>'
         + '<div class="card-meta">'
           + '<span class="card-id">' + n.id.slice(0, 8) + '</span>'
           + '<span class="card-time">' + relTime(n.ts) + '</span>'
@@ -960,6 +981,17 @@ const HTML = `<!DOCTYPE html>
         + '</div>'
       + '</div>';
     }).join("");
+
+    renderedIds = nextRenderedIds;
+
+    // Strip card-enter after animation completes so it never replays on later renders.
+    var cards = list.querySelectorAll(".card-enter");
+    for (var ci = 0; ci < cards.length; ci++) {
+      cards[ci].addEventListener("animationend", function() {
+        this.classList.remove("card-enter");
+        this.style.removeProperty("animation-delay");
+      }, { once: true });
+    }
   }
 
   function renderMsg(s) {
@@ -983,32 +1015,20 @@ const HTML = `<!DOCTYPE html>
     pendingDeletes.add(id);
     beginDeleteHoverSuppression();
     var el = document.getElementById("card-" + id);
-    var finish = function() {
-      pendingDeletes.delete(id);
-      endDeleteHoverSuppression();
-    };
-    if (el) {
-      if (el.matches(":hover")) el.classList.add("hover-lock");
-      var h = el.offsetHeight;
-      el.style.height = h + 'px';
-      el.style.overflow = 'hidden';
-      void el.offsetHeight;
-      el.classList.add("removing");
-      requestAnimationFrame(function() {
-        el.classList.add("collapsing");
-      });
-      setTimeout(function() {
-        if (items[id]) delete items[id];
-        if (el.parentNode) el.parentNode.removeChild(el);
-        finish();
-        if (Object.keys(items).length === 0) render();
-        else updateMeta();
-      }, 220);
+
+    if (items[id]) delete items[id];
+    renderedIds.delete(id);
+
+    if (el && el.parentNode) {
+      el.parentNode.removeChild(el);
+      if (Object.keys(items).length === 0) render();
+      else updateMeta();
     } else {
-      if (items[id]) delete items[id];
-      finish();
       render();
     }
+
+    endDeleteHoverSuppression();
+
     fetch(authUrl("/v1/notification/" + id), { method: "DELETE" })
       .catch(function() { pendingDeletes.delete(id); });
   }
@@ -1027,6 +1047,13 @@ const HTML = `<!DOCTYPE html>
     var es = new EventSource(authUrl("/v1/stream"));
 
     es.onopen = function() { status.classList.remove("off"); };
+
+    es.addEventListener("version", function(e) {
+      var d = JSON.parse(e.data);
+      if (d && d.version && d.version !== CLIENT_SERVER_VERSION) {
+        window.location.reload();
+      }
+    });
 
     es.addEventListener("init", function(e) {
       var data = JSON.parse(e.data);
@@ -1058,7 +1085,10 @@ const HTML = `<!DOCTYPE html>
 
     es.addEventListener("deleted", function(e) {
       var d = JSON.parse(e.data);
-      if (pendingDeletes.has(d.id)) return;
+      if (pendingDeletes.has(d.id)) {
+        pendingDeletes.delete(d.id);
+        return;
+      }
       if (items[d.id]) {
         delete items[d.id];
         render();
@@ -1118,7 +1148,15 @@ const HTML = `<!DOCTYPE html>
   showBannerIfNeeded();
 
   connectSSE();
-  setInterval(render, 15000);
+  setInterval(function() {
+    Object.values(items).forEach(function(n) {
+      var el = document.getElementById("card-" + n.id);
+      if (el) {
+        var timeEl = el.querySelector(".card-time");
+        if (timeEl) timeEl.textContent = relTime(n.ts);
+      }
+    });
+  }, 15000);
 </script>
 </body>
 </html>`;
@@ -1171,7 +1209,10 @@ const server = http.createServer(async (req, res) => {
 
   // Serve UI
   if (path === "/" && method === "GET") {
-    res.writeHead(200, { "Content-Type": "text/html" });
+    res.writeHead(200, {
+      "Content-Type": "text/html",
+      "Cache-Control": "no-store, max-age=0",
+    });
     return res.end(HTML);
   }
 
@@ -1184,6 +1225,7 @@ const server = http.createServer(async (req, res) => {
       "Access-Control-Allow-Origin": "*",
     });
     const all = stmt.all.all().map(row2obj);
+    res.write(`event: version\ndata: ${JSON.stringify({ version: SERVER_VERSION })}\n\n`);
     res.write(`event: init\ndata: ${JSON.stringify(all)}\n\n`);
     clients.add(res);
     req.on("close", () => clients.delete(res));

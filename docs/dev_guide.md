@@ -208,6 +208,14 @@ To modify:
 | `http.createServer(...)` | Route handler with auth check |
 | `process.on("SIGINT/SIGTERM")` | Graceful shutdown, `db.close()` |
 
+### Optimistic UI & SSE echo suppression
+
+The frontend uses optimistic updates for resolve, delete, and clear-all. Pending action sets (`pendingDeletes`, `pendingResolves`, `pendingClear`) prevent redundant renders when the server echoes back the action via SSE.
+
+Delete uses instant DOM removal (no animation) to avoid CSS animation replay artifacts. Card entry animations use a `.card-enter` class that is removed after `animationend` so animations never replay on layout reflow.
+
+Timestamp updates use a targeted `setInterval` that only updates `.card-time` text content, not a full `render()`.
+
 ### Port
 
 Default is `9000`. Override with `--port`:

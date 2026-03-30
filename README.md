@@ -157,7 +157,9 @@ curl -X POST http://localhost:9000/v1/notification \
 
 ## Docs
 
-See [docs/dev_guide.md](docs/dev_guide.md) for API reference, SQLite schema, claude-code hook integration, and development guide.
+- [docs/dev_guide.md](docs/dev_guide.md) — API reference, SQLite schema, claude-code hook integration, development guide
+- [docs/SPEC.md](docs/SPEC.md) — full specification
+- [docs/handoff.md](docs/handoff.md) — session handoff notes
 
 ## License
 

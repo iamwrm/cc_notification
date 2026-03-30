@@ -279,15 +279,16 @@ cc_notification/
 │   ├── SPEC.md            # this file
 │   └── dev_guide.md       # API reference, dev workflow
 ├── README.md              # quick start, usage
-├── handoff.md             # session handoff notes
+├── docs/
+│   ├── handoff.md         # session handoff notes (resolved)
 ├── .gitignore
 └── notifications.db       # auto-created, gitignored
 ```
 
 ## Known issues
 
-### Delete double-flicker (open)
+None currently open.
 
-Clicking Delete on a notification card causes a visible double flicker. See `handoff.md` for full context, what has been tried, and recommended next steps.
+### Delete double-flicker (resolved)
 
-**Status:** unresolved. Unit tests for state logic pass; the bug is likely DOM/animation/layout related.
+Clicking Delete previously caused a visible double flicker on remaining cards. Root cause: the `cardIn` CSS animation was baked into `.card` and could replay on DOM reflow when a sibling was removed. Fixed by moving the animation to a `.card-enter` class that is stripped after `animationend`. Also replaced `setInterval(render, 15000)` with targeted timestamp-only updates. See [docs/handoff.md](handoff.md) for full details.
