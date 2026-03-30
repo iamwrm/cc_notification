@@ -65,6 +65,7 @@ A single-file, self-hosted notification server for [claude-code](https://docs.an
 node server.js [options]
 
 Options:
+  --host <address>  Listening interface (default: 0.0.0.0)
   --port <number>   HTTP port (default: 9000)
   --key <string>    Auth key; when set, every request must include it
   --db <path>       Path to SQLite database file (default: ./notifications.db)

@@ -9,11 +9,13 @@ npm install                                      # one-time: installs better-sql
 node server.js                                   # no auth, default port 9000
 node server.js --key=SECRET                      # with auth key
 node server.js --port 8080 --key=SECRET          # custom port + auth
+node server.js --host 127.0.0.1                  # listen on localhost only
 node server.js --db=/var/data/notifications.db   # custom db path
 ```
 
 | Flag | Default | Description |
 |---|---|---|
+| `--host` | `0.0.0.0` | Listening interface (e.g. `127.0.0.1` for local only) |
 | `--port` | `9000` | HTTP port |
 | `--key` | _(none)_ | Auth key — when set, all requests require it |
 | `--db` | `./notifications.db` | Path to SQLite database file |

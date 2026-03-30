@@ -28,11 +28,12 @@ node server.js
 With options:
 
 ```bash
-node server.js --port 9000 --key=SECRET --db=./data/notifications.db
+node server.js --host 127.0.0.1 --port 9000 --key=SECRET --db=./data/notifications.db
 ```
 
 | Flag | Default | Description |
 |---|---|---|
+| `--host` | `0.0.0.0` | Listening interface (e.g. `127.0.0.1` for local only) |
 | `--port` | `9000` | HTTP port |
 | `--key` | _(none)_ | Auth key — when set, all requests require it |
 | `--db` | `./notifications.db` | Path to SQLite database file |
@@ -45,6 +46,7 @@ Open the URL printed on startup:
   │  claude-code notification server          │
   │                                           │
   │  UI:       http://localhost:9000/?key=…   │
+  │  Host:     0.0.0.0                        │
   │  Key:      SECR******                     │
   │  DB:       notifications.db               │
   │                                           │
