@@ -1,0 +1,5 @@
+node_modules/
+notifications.db
+notifications.db-wal
+notifications.db-shm
+*.log
