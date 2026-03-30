@@ -5,20 +5,20 @@ const Database = require("better-sqlite3");
 
 // ── CLI args ────────────────────────────────────────────────
 function parseArgs(argv) {
-  const args = { port: 9000, key: "", db: "" };
+  const args = { port: 9000, key: "", db: "", tz: "" };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
-    if (a === "--port" && argv[i + 1]) { args.port = parseInt(argv[++i], 10); }
-    else if (a.startsWith("--port="))  { args.port = parseInt(a.split("=")[1], 10); }
-    else if (a === "--key" && argv[i + 1]) { args.key = argv[++i]; }
-    else if (a.startsWith("--key="))   { args.key = a.split("=")[1]; }
-    else if (a === "--db" && argv[i + 1]) { args.db = argv[++i]; }
-    else if (a.startsWith("--db="))    { args.db = a.split("=")[1]; }
-    else if (a === "--help" || a === "-h") {
-      console.log("Usage: node server.js [--port 9000] [--key SECRET] [--db path/to/notifications.db]");
+    if (a === "--help" || a === "-h") {
+      console.log("Usage: node server.js [--port 9000] [--key SECRET] [--db path/to/notifications.db] [--tz Asia/Hong_Kong]");
       process.exit(0);
     }
+    for (const name of ["port", "key", "db", "tz"]) {
+      const flag = `--${name}`;
+      if (a === flag && argv[i + 1]) { args[name] = argv[++i]; break; }
+      if (a.startsWith(flag + "="))  { args[name] = a.slice(flag.length + 1); break; }
+    }
   }
+  args.port = parseInt(args.port, 10);
   return args;
 }
 
@@ -26,6 +26,7 @@ const cli = parseArgs(process.argv);
 const PORT = cli.port;
 const AUTH_KEY = cli.key;
 const DB_PATH = cli.db ? nodePath.resolve(cli.db) : nodePath.join(__dirname, "notifications.db");
+const TZ = cli.tz;
 const SERVER_VERSION = `${Date.now().toString(36)}-${process.pid}`;
 
 // ── SQLite ──────────────────────────────────────────────────
@@ -70,7 +71,7 @@ const HTML = `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Notifications · claude-code</title>
-<script src="https://cdn.jsdelivr.net/npm/marked@17/lib/marked.umd.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/marked@17/lib/marked.umd.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
@@ -319,7 +320,7 @@ const HTML = `<!DOCTYPE html>
     align-items: center;
     gap: 6px;
   }
-  .btn-ghost:hover {
+  .btn-ghost:hover, .btn-icon:hover {
     color: var(--text-secondary);
     border-color: var(--border-hover);
     background: var(--surface);
@@ -338,11 +339,6 @@ const HTML = `<!DOCTYPE html>
     justify-content: center;
     transition: all 0.15s ease;
     flex-shrink: 0;
-  }
-  .btn-icon:hover {
-    color: var(--text-secondary);
-    border-color: var(--border-hover);
-    background: var(--surface);
   }
   .btn-icon svg {
     width: 15px;
@@ -450,7 +446,7 @@ const HTML = `<!DOCTYPE html>
   }
 
   .card.card-enter {
-    animation: cardIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards;
   }
 
   .card::before {
@@ -474,23 +470,13 @@ const HTML = `<!DOCTYPE html>
 
   .card:hover::before { opacity: 1; }
 
-  .card.hover-lock,
-  .card.hover-lock:hover {
-    border-color: var(--border-hover);
-    background: var(--surface-hover);
-    box-shadow: var(--card-hover-shadow);
-  }
-
-  .card.hover-lock::before,
-  .card.hover-lock:hover::before { opacity: 1; }
-
-  body.suppress-hover .card:hover:not(.hover-lock) {
+  body.suppress-hover .card:hover {
     border-color: var(--border);
     background: var(--surface);
     box-shadow: none;
   }
 
-  body.suppress-hover .card:hover:not(.hover-lock)::before { opacity: 0.6; }
+  body.suppress-hover .card:hover::before { opacity: 0.6; }
 
   .card.resolved { opacity: 0.35; }
   .card.resolved::before { background: var(--green); opacity: 0.4; }
@@ -499,43 +485,10 @@ const HTML = `<!DOCTYPE html>
     box-shadow: var(--card-resolved-hover-shadow);
   }
 
-  .card.resolved.hover-lock,
-  .card.resolved.hover-lock:hover {
-    opacity: 0.45;
-    box-shadow: var(--card-resolved-hover-shadow);
-  }
-
-  .card.resolved.hover-lock::before,
-  .card.resolved.hover-lock:hover::before { opacity: 0.4; }
-
-  body.suppress-hover .card.resolved:hover:not(.hover-lock) {
+  body.suppress-hover .card.resolved:hover {
     opacity: 0.35;
     box-shadow: none;
   }
-
-  .card.removing {
-    overflow: hidden;
-    opacity: 0;
-    transform: scale(0.985) translateY(-4px);
-    height: 0 !important;
-    min-height: 0;
-    margin-bottom: 0;
-    padding-top: 0;
-    padding-bottom: 0;
-    border-top-width: 0;
-    border-bottom-width: 0;
-    pointer-events: none;
-  }
-
-  .card.removing::before {
-    opacity: 0;
-  }
-
-  @keyframes cardIn {
-    from { opacity: 0; transform: translateY(12px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
 
   .card-meta {
     display: flex;
@@ -554,10 +507,17 @@ const HTML = `<!DOCTYPE html>
 
   .card-time {
     font-size: 11px;
-    color: var(--text);
     font-weight: 400;
     letter-spacing: -0.01em;
     transition: color 0.35s;
+  }
+
+  .card-ts {
+    color: var(--text-secondary);
+  }
+
+  .card-rel {
+    color: var(--text);
   }
 
   .card-msg {
@@ -847,16 +807,7 @@ const HTML = `<!DOCTYPE html>
     </div>
   </div>
 
-  <main id="list">
-    <div class="empty">
-      <div class="empty-ring"></div>
-      <div class="empty-label">No notifications</div>
-      <div class="empty-detail">
-        Listening on <code>:9000/v1/notification</code><br>
-        Waiting for incoming hooks
-      </div>
-    </div>
-  </main>
+  <main id="list"></main>
 
 <script>
   /* ── Theme ── */
@@ -876,38 +827,61 @@ const HTML = `<!DOCTYPE html>
 
   /* ── Auth key from URL ── */
   const CLIENT_SERVER_VERSION = ${JSON.stringify(SERVER_VERSION)};
+  var TZ = ${JSON.stringify(TZ)};
   var authKey = new URLSearchParams(window.location.search).get('key') || '';
   function authUrl(path) { return authKey ? path + (path.indexOf('?') === -1 ? '?' : '&') + 'key=' + encodeURIComponent(authKey) : path; }
 
   /* ── State ── */
   let items = {};
   let renderedIds = new Set();
-  let pendingDeletes = new Set();
-  let pendingResolves = new Set();
-  let pendingClear = false;
-  let deleteHoverSuppressions = 0;
-  let releaseSuppressedHover = null;
+  let hoverRelease = null;
 
   function relTime(ts) {
-    const s = Math.floor((Date.now() - ts) / 1000);
+    var s = Math.floor((Date.now() - ts) / 1000);
     if (s < 5) return "now";
     if (s < 60) return s + "s";
     if (s < 3600) return Math.floor(s / 60) + "m";
-    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return "";
+  }
+
+  var _tzOpts = TZ ? { timeZone: TZ } : {};
+  var _dtFmt = new Intl.DateTimeFormat('en-CA', Object.assign({
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false
+  }, _tzOpts));
+  var _offFmt = new Intl.DateTimeFormat('en-US', Object.assign({
+    timeZoneName: 'longOffset'
+  }, _tzOpts));
+
+  function fmtTime(ts) {
+    var d = new Date(ts);
+    var p = {};
+    _dtFmt.formatToParts(d).forEach(function(x) { p[x.type] = x.value; });
+    var offPart = _offFmt.formatToParts(d).find(function(x) { return x.type === 'timeZoneName'; });
+    var off = offPart ? offPart.value.replace('GMT', '') : '';
+    if (!off) off = '+00:00';
+    else {
+      var sign = off[0];
+      var parts = off.slice(1).split(':');
+      off = sign + parts[0].padStart(2, '0') + ':' + (parts[1] || '00').padStart(2, '0');
+      if (off === '-00:00') off = '+00:00';
+    }
+    return p.year + '-' + p.month + '-' + p.day
+      + 'T' + p.hour + ':' + p.minute + ':' + p.second + off;
   }
 
   function emptyHtml() {
     return '<div class="empty">'
       + '<div class="empty-ring"></div>'
       + '<div class="empty-label">No notifications</div>'
-      + '<div class="empty-detail">Listening on <code>:9000/v1/notification</code><br>Waiting for incoming hooks</div>'
+      + '<div class="empty-detail">Listening on <code>:${PORT}/v1/notification</code><br>Waiting for incoming hooks</div>'
       + '</div>';
   }
 
-  function updateMeta() {
-    const active = Object.values(items).filter(function(n) { return !n.resolved; });
+  function updateMeta(sorted) {
+    const c = sorted.filter(function(n) { return !n.resolved; }).length;
     const el = document.getElementById("countEl");
-    const c = active.length;
     el.textContent = c;
     el.className = c > 0 ? "count" : "count zero";
 
@@ -916,34 +890,20 @@ const HTML = `<!DOCTYPE html>
       : "notifications \\u00b7 claude-code";
   }
 
-  function cancelSuppressedHoverRelease() {
-    if (!releaseSuppressedHover) return;
-    window.removeEventListener("pointermove", releaseSuppressedHover, true);
-    window.removeEventListener("pointerdown", releaseSuppressedHover, true);
-    releaseSuppressedHover = null;
-  }
-
-  function armSuppressedHoverRelease() {
-    if (releaseSuppressedHover) return;
-    releaseSuppressedHover = function() {
-      cancelSuppressedHoverRelease();
-      document.body.classList.remove("suppress-hover");
-    };
-    window.addEventListener("pointermove", releaseSuppressedHover, true);
-    window.addEventListener("pointerdown", releaseSuppressedHover, true);
-  }
-
-  function beginDeleteHoverSuppression() {
-    deleteHoverSuppressions++;
-    cancelSuppressedHoverRelease();
-    document.body.classList.add("suppress-hover");
-  }
-
-  function endDeleteHoverSuppression() {
-    deleteHoverSuppressions = Math.max(0, deleteHoverSuppressions - 1);
-    if (deleteHoverSuppressions === 0) {
-      armSuppressedHoverRelease();
+  function suppressHover() {
+    if (hoverRelease) {
+      window.removeEventListener("pointermove", hoverRelease, true);
+      window.removeEventListener("pointerdown", hoverRelease, true);
     }
+    document.body.classList.add("suppress-hover");
+    hoverRelease = function() {
+      window.removeEventListener("pointermove", hoverRelease, true);
+      window.removeEventListener("pointerdown", hoverRelease, true);
+      document.body.classList.remove("suppress-hover");
+      hoverRelease = null;
+    };
+    window.addEventListener("pointermove", hoverRelease, true);
+    window.addEventListener("pointerdown", hoverRelease, true);
   }
 
   function render() {
@@ -952,7 +912,7 @@ const HTML = `<!DOCTYPE html>
     const prevRenderedIds = renderedIds;
     const nextRenderedIds = new Set();
 
-    updateMeta();
+    updateMeta(sorted);
 
     if (sorted.length === 0) {
       renderedIds = nextRenderedIds;
@@ -967,10 +927,13 @@ const HTML = `<!DOCTYPE html>
       var cls = n.resolved ? "card resolved" : "card";
       if (shouldEnter) cls += " card-enter";
       var dly = shouldEnter ? "animation-delay:" + (i * 0.035) + "s" : "";
+      var rel = relTime(n.ts);
       return '<div class="' + cls + '" id="card-' + n.id + '"' + (dly ? ' style="' + dly + '"' : '') + '>'
         + '<div class="card-meta">'
           + '<span class="card-id">' + n.id.slice(0, 8) + '</span>'
-          + '<span class="card-time">' + relTime(n.ts) + '</span>'
+          + '<span class="card-time"><span class="card-ts">' + fmtTime(n.ts) + '</span>'
+            + (rel ? '<span class="card-rel"> \\u00b7 ' + rel + '</span>' : '')
+          + '</span>'
         + '</div>'
         + '<div class="card-msg">' + renderMsg(n.msg) + '</div>'
         + '<div class="card-actions">'
@@ -1004,16 +967,13 @@ const HTML = `<!DOCTYPE html>
   }
 
   function resolve(id) {
-    pendingResolves.add(id);
     if (items[id]) items[id].resolved = true;
     render();
-    fetch(authUrl("/v1/notification/" + id + "/resolve"), { method: "POST" })
-      .catch(function() { pendingResolves.delete(id); });
+    fetch(authUrl("/v1/notification/" + id + "/resolve"), { method: "POST" });
   }
 
   function remove(id) {
-    pendingDeletes.add(id);
-    beginDeleteHoverSuppression();
+    suppressHover();
     var el = document.getElementById("card-" + id);
 
     if (items[id]) delete items[id];
@@ -1021,24 +981,20 @@ const HTML = `<!DOCTYPE html>
 
     if (el && el.parentNode) {
       el.parentNode.removeChild(el);
-      if (Object.keys(items).length === 0) render();
-      else updateMeta();
+      var remaining = Object.values(items);
+      if (remaining.length === 0) render();
+      else updateMeta(remaining);
     } else {
       render();
     }
 
-    endDeleteHoverSuppression();
-
-    fetch(authUrl("/v1/notification/" + id), { method: "DELETE" })
-      .catch(function() { pendingDeletes.delete(id); });
+    fetch(authUrl("/v1/notification/" + id), { method: "DELETE" });
   }
 
   function clearAll() {
-    pendingClear = true;
     items = {};
     render();
-    fetch(authUrl("/v1/notifications"), { method: "DELETE" })
-      .catch(function() { pendingClear = false; });
+    fetch(authUrl("/v1/notifications"), { method: "DELETE" });
   }
 
   /* ── SSE ── */
@@ -1073,10 +1029,6 @@ const HTML = `<!DOCTYPE html>
 
     es.addEventListener("resolved", function(e) {
       var d = JSON.parse(e.data);
-      if (pendingResolves.has(d.id)) {
-        pendingResolves.delete(d.id);
-        return;
-      }
       if (items[d.id] && !items[d.id].resolved) {
         items[d.id].resolved = true;
         render();
@@ -1085,10 +1037,6 @@ const HTML = `<!DOCTYPE html>
 
     es.addEventListener("deleted", function(e) {
       var d = JSON.parse(e.data);
-      if (pendingDeletes.has(d.id)) {
-        pendingDeletes.delete(d.id);
-        return;
-      }
       if (items[d.id]) {
         delete items[d.id];
         render();
@@ -1096,10 +1044,6 @@ const HTML = `<!DOCTYPE html>
     });
 
     es.addEventListener("cleared", function() {
-      if (pendingClear) {
-        pendingClear = false;
-        return;
-      }
       if (Object.keys(items).length > 0) {
         items = {};
         render();
@@ -1146,14 +1090,25 @@ const HTML = `<!DOCTYPE html>
   }
 
   showBannerIfNeeded();
+  render();
 
   connectSSE();
   setInterval(function() {
     Object.values(items).forEach(function(n) {
       var el = document.getElementById("card-" + n.id);
-      if (el) {
-        var timeEl = el.querySelector(".card-time");
-        if (timeEl) timeEl.textContent = relTime(n.ts);
+      if (!el) return;
+      var rel = relTime(n.ts);
+      var relEl = el.querySelector(".card-rel");
+      if (rel) {
+        if (relEl) relEl.textContent = ' \\u00b7 ' + rel;
+        else {
+          var span = document.createElement('span');
+          span.className = 'card-rel';
+          span.textContent = ' \\u00b7 ' + rel;
+          el.querySelector('.card-time').appendChild(span);
+        }
+      } else if (relEl) {
+        relEl.remove();
       }
     });
   }, 15000);
@@ -1274,8 +1229,9 @@ const server = http.createServer(async (req, res) => {
 });
 
 // Graceful shutdown — close db
-process.on("SIGINT", () => { db.close(); process.exit(0); });
-process.on("SIGTERM", () => { db.close(); process.exit(0); });
+const shutdown = () => { db.close(); process.exit(0); };
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
 
 server.listen(PORT, () => {
   const keyInfo = AUTH_KEY ? `  │  Key:      ${AUTH_KEY.slice(0, 4)}${'*'.repeat(Math.max(0, AUTH_KEY.length - 4))}` : '  │  Auth:     disabled';
@@ -1286,7 +1242,7 @@ server.listen(PORT, () => {
   │                                           │
   │  UI:       ${uiUrl}${' '.repeat(Math.max(1, 34 - uiUrl.length))}│
 ${keyInfo}${' '.repeat(Math.max(1, 44 - keyInfo.length))}│
-  │  DB:       notifications.db               │
+  │  DB:       ${nodePath.basename(DB_PATH)}${' '.repeat(Math.max(1, 23 - nodePath.basename(DB_PATH).length))}│
   │                                           │
   │  POST :${PORT}/v1/notification               │
   │  { "msg": "…" }                           │
