@@ -5,15 +5,17 @@ const Database = require("better-sqlite3");
 
 // ── CLI args ────────────────────────────────────────────────
 function parseArgs(argv) {
-  const args = { port: 9000, key: "" };
+  const args = { port: 9000, key: "", db: "" };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--port" && argv[i + 1]) { args.port = parseInt(argv[++i], 10); }
     else if (a.startsWith("--port="))  { args.port = parseInt(a.split("=")[1], 10); }
     else if (a === "--key" && argv[i + 1]) { args.key = argv[++i]; }
     else if (a.startsWith("--key="))   { args.key = a.split("=")[1]; }
+    else if (a === "--db" && argv[i + 1]) { args.db = argv[++i]; }
+    else if (a.startsWith("--db="))    { args.db = a.split("=")[1]; }
     else if (a === "--help" || a === "-h") {
-      console.log("Usage: node server.js [--port 9000] [--key SECRET]");
+      console.log("Usage: node server.js [--port 9000] [--key SECRET] [--db path/to/notifications.db]");
       process.exit(0);
     }
   }
@@ -23,7 +25,7 @@ function parseArgs(argv) {
 const cli = parseArgs(process.argv);
 const PORT = cli.port;
 const AUTH_KEY = cli.key;
-const DB_PATH = nodePath.join(__dirname, "notifications.db");
+const DB_PATH = cli.db ? nodePath.resolve(cli.db) : nodePath.join(__dirname, "notifications.db");
 
 // ── SQLite ──────────────────────────────────────────────────
 const db = new Database(DB_PATH);

@@ -5,16 +5,18 @@ A self-hosted notification dashboard for [claude-code](https://docs.anthropic.co
 ## Quick start
 
 ```bash
-npm install                          # one-time: installs better-sqlite3
-node server.js                       # no auth, default port 9000
-node server.js --key=SECRET          # with auth key
-node server.js --port 8080 --key=SECRET  # custom port + auth
+npm install                                      # one-time: installs better-sqlite3
+node server.js                                   # no auth, default port 9000
+node server.js --key=SECRET                      # with auth key
+node server.js --port 8080 --key=SECRET          # custom port + auth
+node server.js --db=/var/data/notifications.db   # custom db path
 ```
 
 | Flag | Default | Description |
 |---|---|---|
 | `--port` | `9000` | HTTP port |
 | `--key` | _(none)_ | Auth key — when set, all requests require it |
+| `--db` | `./notifications.db` | Path to SQLite database file |
 | `--help` | | Show usage |
 
 The server prints a banner with the full UI URL on startup.

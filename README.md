@@ -28,13 +28,14 @@ node server.js
 With options:
 
 ```bash
-node server.js --port 9000 --key=SECRET
+node server.js --port 9000 --key=SECRET --db=./data/notifications.db
 ```
 
 | Flag | Default | Description |
 |---|---|---|
 | `--port` | `9000` | HTTP port |
 | `--key` | _(none)_ | Auth key — when set, all requests require it |
+| `--db` | `./notifications.db` | Path to SQLite database file |
 | `--help` | | Show usage |
 
 Open the URL printed on startup:
